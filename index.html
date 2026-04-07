@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工器具点検アプリ (Tool/Equipment Inspection App)</title>
+    
+    <!-- PWA / iPad用設定 -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="工具点検">
+    <!-- 仮のアイコン設定（後で独自の画像に差し替え可能） -->
+    <link rel="apple-touch-icon" href="https://cdn.pixabay.com/photo/2016/03/31/14/37/check-mark-1292787_1280.png">
+
+    <!-- 優れたデザインのためのGoogle Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- アイコン用 (Phosphor Icons - モダンで洗練されたアイコン) -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- サイドナビゲーション -->
+        <aside class="sidebar">
+            <div class="brand">
+                <i class="ph-fill ph-check-circle brand-icon"></i>
+                <h1>工器具点検</h1>
+            </div>
+            
+            <nav class="nav-menu">
+                <a href="#dashboard" class="nav-item active" data-view="dashboard">
+                    <i class="ph ph-squares-four"></i>
+                    <span>ホーム</span>
+                </a>
+                <a href="#inspection" class="nav-item" data-view="inspection">
+                    <i class="ph ph-clipboard-text"></i>
+                    <span>月次点検</span>
+                </a>
+                <a href="#inventory" class="nav-item" data-view="inventory">
+                    <i class="ph ph-package"></i>
+                    <span>工具マスター管理</span>
+                </a>
+                <a href="#reports" class="nav-item" data-view="reports">
+                    <i class="ph ph-file-pdf"></i>
+                    <span>履歴・出力</span>
+                </a>
+                <a href="#settings" class="nav-item" data-view="settings">
+                    <i class="ph ph-gear"></i>
+                    <span>設定・連携</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- メインコンテンツ領域 -->
+        <main class="main-content">
+            <header class="topbar">
+                <button id="sidebar-toggle" class="btn-icon mobile-only">
+                    <i class="ph ph-list"></i>
+                </button>
+                <h2 id="view-title">ホーム</h2>
+                <div class="user-info">
+                    <div class="avatar"><i class="ph ph-user"></i></div>
+                    <span class="user-name">管理者</span>
+                </div>
+            </header>
+            
+            <div id="view-container" class="view-container">
+                <!-- ここに各画面のコンテンツが動的に挿入されます -->
+            </div>
+        </main>
+    </div>
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- コンポーネント用のテンプレート -->
+    <template id="tmpl-dashboard">
+        <div class="dashboard-view">
+            <div class="stats-cards">
+                <div class="card stat-card">
+                    <div class="stat-icon orange"><i class="ph ph-warning-circle"></i></div>
+                    <div class="stat-info">
+                        <h3>要補充（消耗品）</h3>
+                        <p class="stat-number" id="dash-low-stock">0</p>
+                    </div>
+                </div>
+                <div class="card stat-card">
+                    <div class="stat-icon blue"><i class="ph ph-arrow-circle-right"></i></div>
+                    <div class="stat-info">
+                        <h3>貸出中・校正中</h3>
+                        <p class="stat-number" id="dash-maintenance">0</p>
+                    </div>
+                </div>
+                <div class="card stat-card">
+                    <div class="stat-icon green"><i class="ph ph-check-square-offset"></i></div>
+                    <div class="stat-info">
+                        <h3>登録工具数</h3>
+                        <p class="stat-number" id="dash-total-items">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="ph ph-bell"></i> 通知・アラート</h3>
+                    </div>
+                    <div class="card-body">
+                        <ul id="alert-list" class="alert-list">
+                            <!-- アラート項目がここに入ります -->
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="ph ph-wrench"></i> 貸出・校正中リスト</h3>
+                    </div>
+                    <div class="card-body">
+                        <ul id="maintenance-list" class="maintenance-list">
+                            <!-- 校正中・貸出中リストがここに入ります -->
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template id="tmpl-inventory">
+        <div class="inventory-view">
+            <div class="view-header-actions">
+                <button class="btn btn-primary" id="btn-add-item">
+                    <i class="ph ph-plus"></i> 新規工具を追加
+                </button>
+            </div>
+            
+            <div class="card">
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>工具・器具名</th>
+                                <th>配置場所</th>
+                                <th>種類</th>
+                                <th>規定数</th>
+                                <th>状態</th>
+                                <th>塗色確認</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventory-tbody">
+                            <!-- 工具データが挿入されます -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template id="tmpl-inspection">
+        <div class="inspection-view">
+            <div class="card" id="inspection-start-card">
+                <div class="card-body text-center">
+                    <h3 style="margin-bottom: 24px;">今月の点検を開始しますか？</h3>
+                    <div class="input-group" style="max-width: 400px; margin: 0 auto 24px auto; text-align: left;">
+                        <label>点検実施者名</label>
+                        <input type="text" id="inspector-name" class="form-control" placeholder="例: 作業 太郎">
+                    </div>
+                    <button class="btn btn-primary btn-lg" id="btn-start-inspection">
+                        <i class="ph ph-play-circle"></i> 点検を開始する
+                    </button>
+                </div>
+            </div>
+
+            <div id="inspection-form-container" style="display: none;">
+                <div class="card">
+                     <div class="card-header">
+                         <h3 id="current-inspection-date">20xx年xx月の点検</h3>
+                     </div>
+                     <div class="table-responsive">
+                         <table class="data-table">
+                             <thead>
+                                 <tr>
+                                     <th>工具名</th>
+                                     <th>配置場所</th>
+                                     <th>規定数</th>
+                                     <th>点検数</th>
+                                     <th>塗色確認</th>
+                                     <th>状態更新</th>
+                                 </tr>
+                             </thead>
+                             <tbody id="inspection-tbody">
+                                 <!-- 点検項目 -->
+                             </tbody>
+                         </table>
+                     </div>
+                     <div class="card-footer" style="text-align: center; margin-top: 1rem;">
+                         <button class="btn btn-primary btn-lg" id="btn-submit-inspection">
+                             <i class="ph ph-check-circle"></i> 点検データを確定して保存
+                         </button>
+                     </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template id="tmpl-reports">
+        <div class="reports-view">
+            <div class="card">
+                <div class="card-header">
+                    <h3>過去の点検履歴</h3>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>点検年月</th>
+                                <th>点検実施者</th>
+                                <th>アイテム数</th>
+                                <th>状態</th>
+                                <th>レポート出力</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reports-tbody">
+                            <!-- 履歴データが挿入されます -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template id="tmpl-settings">
+        <div class="settings-view">
+            <div class="dashboard-grid">
+                <!-- Power Automate連携 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="ph ph-plugs-connected"></i> Power Automate 連携</h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted" style="margin-bottom: 16px; font-size: 14px;">
+                            月次点検が完了した際に、ここで設定したURLへ点検データを自動送信します。<br>SharePointへの書き込みなどを自動化したい場合に利用設定してください。
+                        </p>
+                        <form id="settings-webhook-form">
+                            <div class="form-group">
+                                <label for="setting-webhook-url">HTTP Webhook URL</label>
+                                <input type="url" id="setting-webhook-url" class="form-control" placeholder="https://prod-...">
+                            </div>
+                            <button type="submit" class="btn btn-primary">保存する</button>
+                            <span id="webhook-save-msg" style="margin-left: 12px; color: var(--success-color); display: none;">保存しました！</span>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- バックアップ・復旧 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="ph ph-database"></i> データ引っ越し・バックアップ</h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted" style="margin-bottom: 16px; font-size: 14px;">
+                            別のPCにデータを移動させたい場合や、万が一の備えにデータをファイルとして書き出します。
+                        </p>
+                        <div style="margin-bottom: 32px;">
+                            <button class="btn btn-secondary" id="btn-export-data">
+                                <i class="ph ph-download-simple"></i> バックアップをダウンロード
+                            </button>
+                        </div>
+                        
+                        <hr style="border:none; border-top:1px solid var(--border-color); margin-bottom: 24px;">
+
+                        <p class="text-muted" style="margin-bottom: 16px; font-size: 14px;">
+                            ダウンロードしたバックアップファイルを読み込ませます（※現在のデータは上書き・追加されます）。
+                        </p>
+                        <div style="display: flex; gap: 12px;">
+                            <input type="file" id="file-import-data" accept=".json" class="form-control" style="max-width: 280px; padding: 6px;">
+                            <button class="btn btn-primary" id="btn-import-data">
+                                <i class="ph ph-upload-simple"></i> 復元する
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- モーダル・ダイアログ (例: アイテム追加/編集) -->
+    <div id="item-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">新規工具の追加</h3>
+                <button class="modal-close"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="item-form">
+                    <input type="hidden" id="item-id">
+                    
+                    <div class="form-group">
+                        <label for="item-name">工具・器具名</label>
+                        <input type="text" id="item-name" class="form-control" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="item-type">管理方法</label>
+                        <select id="item-type" class="form-control">
+                            <option value="equipment">1点管理（器具や計測器）</option>
+                            <option value="consumable">複数管理（消耗品など）</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="item-location">配置場所 (A～G)</label>
+                        <select id="item-location" class="form-control">
+                            <option value="A">配置エリア：A</option>
+                            <option value="B">配置エリア：B</option>
+                            <option value="C">配置エリア：C</option>
+                            <option value="D">配置エリア：D</option>
+                            <option value="E">配置エリア：E</option>
+                            <option value="F">配置エリア：F</option>
+                            <option value="G">配置エリア：G</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="item-required-qty">規定数</label>
+                        <input type="number" id="item-required-qty" class="form-control" value="1" min="1" required>
+                        <small class="form-text">消耗品の場合は、この数を下回るとアラートが通知されます。</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="item-paint">塗色確認の要否</label>
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="item-paint">
+                            <label for="item-paint">この工具には塗色確認が必要</label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="item-status">現在の状態</label>
+                        <select id="item-status" class="form-control">
+                            <option value="normal">通常（倉庫内）</option>
+                            <option value="borrowed">貸出中</option>
+                            <option value="calibration">校正中</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group" id="calibration-date-group" style="display: none;">
+                        <label for="item-calibration-date">次回校正予定日</label>
+                        <input type="date" id="item-calibration-date" class="form-control">
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="btn-cancel-modal">キャンセル</button>
+                        <button type="submit" class="btn btn-primary">保存する</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Excel出力用ライブラリ(SheetJS CDN) -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    
+    <!-- アプリケーションのスクリプト群 -->
+    <script src="js/storage.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/inventory.js"></script>
+    <script src="js/inspection.js"></script>
+    <script src="js/reports.js"></script>
+    <script src="js/settings.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
