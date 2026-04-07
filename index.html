@@ -401,16 +401,68 @@
         </div>
     </div>
 
+    <!-- 自己診断用スクリプト（JSのエラーを画面に表示） -->
+    <script>
+        // 1. スクリプトの読み込みエラーを早期に検知するためのフック
+        window.onerror = function(msg, url, line, col, error) {
+            const container = document.getElementById('view-container');
+            if (container) {
+                container.innerHTML = `
+                    <div style="padding:24px; background:#fff1f2; border:2px solid #fda4af; border-radius:12px; color:#9f1239; margin:20px; font-family:sans-serif;">
+                        <h3 style="margin-top:0;"><i class="ph ph-warning-circle"></i> 起動時にエラーが発生しました</h3>
+                        <p style="font-weight:bold; margin:8px 0;">内容: ${msg}</p>
+                        <p style="font-size:12px; color:#be123c;">場所: ${url} (L:${line})</p>
+                        <div style="margin-top:16px; font-size:13px; color:#4c0519; background:rgba(255,255,255,0.5); padding:10px; border-radius:6px;">
+                            <strong>ヒント:</strong> GitHubに <code>js</code> フォルダとファイルが全てアップロードされているか確認し、ファイル名の大文字・小文字が合っているか確認してください。
+                        </div>
+                        <button onclick="location.reload()" style="margin-top:16px; padding:8px 16px; background:#9f1239; color:white; border:none; border-radius:6px; cursor:pointer;">再読み込みを試す</button>
+                    </div>
+                `;
+            }
+            return false;
+        };
+
+        // 2. 特定のファイルが読み込めなかった場合を検知する関数
+        function reportScriptError(filename) {
+            console.error('Failed to load script:', filename);
+            const container = document.getElementById('view-container');
+            if (container && !container.innerHTML.includes('ファイルが見つかりません')) {
+                container.innerHTML = `
+                    <div style="padding:24px; background:#fff1f2; border:2px solid #fda4af; border-radius:12px; color:#9f1239; margin:20px; font-family:sans-serif;">
+                        <h3 style="margin-top:0;"><i class="ph ph-warning-circle"></i> ファイルが見つかりません</h3>
+                        <p style="font-weight:bold; margin:8px 0;">以下のファイルが読み込めませんでした：<br><code>${filename}</code></p>
+                        <p style="font-size:13px; margin-top:12px;">GitHub上のファイル名が大文字・小文字（例: app.js vs App.js）を含め、正しいか確認してください。</p>
+                        <button onclick="location.reload()" style="margin-top:16px; padding:8px 16px; background:#9f1239; color:white; border:none; border-radius:6px; cursor:pointer;">再読み込みを試す</button>
+                    </div>
+                `;
+                const loading = document.getElementById('app-loading');
+                if (loading) loading.style.display = 'none';
+            }
+        }
+    </script>
+    
     <!-- Excel出力用ライブラリ(SheetJS CDN) -->
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js" onerror="reportScriptError('SheetJS')"></script>
     
     <!-- アプリケーションのスクリプト群 -->
-    <script src="js/storage.js"></script>
-    <script src="js/dashboard.js"></script>
-    <script src="js/inventory.js"></script>
-    <script src="js/inspection.js"></script>
-    <script src="js/reports.js"></script>
-    <script src="js/settings.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/storage.js" onerror="reportScriptError('js/storage.js')"></script>
+    <script src="js/dashboard.js" onerror="reportScriptError('js/dashboard.js')"></script>
+    <script src="js/inventory.js" onerror="reportScriptError('js/inventory.js')"></script>
+    <script src="js/inspection.js" onerror="reportScriptError('js/inspection.js')"></script>
+    <script src="js/reports.js" onerror="reportScriptError('js/reports.js')"></script>
+    <script src="js/settings.js" onerror="reportScriptError('js/settings.js')"></script>
+    <script src="js/app.js" onerror="reportScriptError('js/app.js')"></script>
+
+    <!-- 3. 読み込み完了後の診断チェック -->
+    <script>
+        setTimeout(() => {
+            if (typeof App === 'undefined' || typeof DashboardView === 'undefined') {
+                const loading = document.getElementById('app-loading');
+                if (loading && loading.style.display !== 'none') {
+                    reportScriptError('初期化に失敗しました。スクリプト間の依存関係または読み込み順序に問題がある可能性があります。');
+                }
+            }
+        }, 5000); // 5秒待って起動していなければ警告
+    </script>
 </body>
 </html>
