@@ -1,45 +1,85 @@
 // js/app.js
 
+/**
+ * アプリケーションの全体制御クラス
+ * 初期化、ルーティング、エラーハンドリングを担います。
+ */
 const App = {
     init() {
-        console.log('App initialization started. Current location:', window.location.href);
+        console.log('--- App Initialization Started ---');
+        console.log('UserAgent:', navigator.userAgent);
+        console.log('Location:', window.location.href);
+
+        // グローバルエラーハンドラーの登録
+        this.setupGlobalErrorHandlers();
+
         try {
-            // ストレージの初期化
+            // 1. ストレージの初期化
+            console.log('Step 1: Initializing Storage...');
             this.checkStorage();
             
-            // 各コンポーネントが読み込まれているかチェック
+            // 2. コンポーネントの有効性チェック
+            console.log('Step 2: Validating Components...');
             this.validateComponents();
 
+            // 3. イベントバインド
+            console.log('Step 3: Binding Events...');
             this.bindNav();
             this.bindSidebar();
             
-            // 初期ルートの設定
+            // 4. 初期ルートの実行
             const hash = window.location.hash.replace('#', '') || 'dashboard';
-            console.log('Initial routing to:', hash);
+            console.log('Step 4: Initial Routing to:', hash);
             this.router(hash);
             
-            // 正常に起動したら「読み込み中」表示を消す（もしあれば）
-            const loadingEl = document.getElementById('app-loading');
-            if (loadingEl) loadingEl.style.display = 'none';
+            // 5. ローディング表示を確実に消す
+            this.hideLoading();
 
-            console.log('App initialized successfully');
+            console.log('--- App Initialized Successfully ---');
         } catch (e) {
-            console.error('App Init Error:', e);
+            console.error('Fatal Initialization Error:', e);
+            this.hideLoading();
             this.showFatalError(e.message);
         }
     },
 
-    checkStorage() {
-        try {
-            if (typeof StorageManager !== 'undefined' && StorageManager.init) {
-                StorageManager.init();
-                console.log('StorageManager initialized');
-            } else {
-                throw new Error('StorageManager (js/storage.js) が読み込まれていないか、初期化に失敗しました。');
+    /**
+     * グローバルなJSエラーをキャッチして画面に表示します。
+     * これにより、原因不明の「真っ白」や「フリーズ」を防ぎます。
+     */
+    setupGlobalErrorHandlers() {
+        window.onerror = (msg, url, lineNo, columnNo, error) => {
+            const errorMsg = `[Runtime Error] ${msg}\nFile: ${url}\nLine: ${lineNo}:${columnNo}`;
+            console.error(errorMsg);
+            this.hideLoading();
+            // すでに致命的エラー画面が出ていない場合のみ表示
+            if (!document.getElementById('fatal-error-box')) {
+                this.showFatalError(msg + ` (at ${url}:${lineNo})`);
             }
-        } catch (e) {
-            console.error('Storage Check Error:', e);
-            throw new Error('ストレージの初期化に失敗しました。ブラウザの設定（Cookie/ローカルストレージ）を確認してください。: ' + e.message);
+            return false;
+        };
+
+        window.onunhandledrejection = (event) => {
+            console.error('[Promise Rejection]', event.reason);
+            this.hideLoading();
+            this.showFatalError('非同期処理でエラーが発生しました: ' + event.reason);
+        };
+    },
+
+    hideLoading() {
+        const loadingEl = document.getElementById('app-loading');
+        if (loadingEl) {
+            loadingEl.style.display = 'none';
+            console.log('Loading screen hidden');
+        }
+    },
+
+    checkStorage() {
+        if (typeof StorageManager !== 'undefined' && StorageManager.init) {
+            StorageManager.init();
+            console.log('StorageManager ready');
+        } else {
+            throw new Error('StorageManager (js/storage.js) が見つかりません。ファイルが正しくアップロードされているか確認してください。');
         }
     },
 
@@ -60,38 +100,39 @@ const App = {
         }
 
         if (missing.length > 0) {
-            throw new Error('以下のファイルが読み込まれていません:\n' + missing.join('\n') + '\n\nGitHubに全てのファイルがアップロードされているか、パスが正しいか（大文字小文字など）確認してください。');
+            throw new Error('以下のファイルが読み込まれていないか、壊れています:\n' + missing.join('\n'));
         }
-        console.log('All components validated');
+        console.log('All View components found');
     },
 
     showFatalError(msg) {
         const container = document.getElementById('view-container') || document.body;
         container.innerHTML = `
-            <div style="padding:32px; max-width:600px; margin:40px auto; color:#b91c1c; background:#fef2f2; border:2px solid #fee2e2; border-radius:12px; font-family:sans-serif; line-height:1.6;">
-                <h2 style="margin-top:0; display:flex; align-items:center; gap:8px;">
-                    <svg style="width:24px;height:24px" viewBox="0 0 24 24"><path fill="currentColor" d="M13,13H11V7H13M13,17H11V15H13M12,2L1,21H23L12,2Z"/></svg>
+            <div id="fatal-error-box" style="padding:32px; max-width:600px; margin:40px auto; color:#b91c1c; background:#fef2f2; border:2px solid #fee2e2; border-radius:12px; font-family:sans-serif; line-height:1.6; animation: fadeIn 0.3s ease;">
+                <h2 style="margin-top:0; display:flex; align-items:center; gap:12px;">
+                    <i class="ph-fill ph-warning-circle" style="font-size:32px;"></i>
                     起動エラー
                 </h2>
-                <p>アプリケーションの起動中に問題が発生しました：</p>
-                <div style="background:white; padding:12px; border-radius:6px; border:1px solid #fecaca; font-family:monospace; white-space:pre-wrap; margin:16px 0;">${msg}</div>
-                <p style="font-size:14px; color:#7f1d1d;">
-                    <strong>解決のヒント:</strong><br>
-                    1. GitHubに <code>js</code> フォルダとファイルが全てアップロードされているか確認してください。<br>
-                    2. ファイル名の大文字・小文字が <code>index.html</code> での指定と一致しているか確認してください。<br>
-                    3. ブラウザの「再読み込み」を試してください。
-                </p>
-                <button onclick="location.reload()" style="background:#b91c1c; color:white; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:600;">ページを再読み込み</button>
+                <p>申し訳ありません。アプリの起動中に問題が発生しました：</p>
+                <div style="background:white; padding:16px; border-radius:8px; border:1px solid #fecaca; font-family:monospace; font-size:13px; white-space:pre-wrap; margin:20px 0; overflow-x:auto;">${msg}</div>
+                <div style="font-size:14px; color:#7f1d1d; border-top:1px solid #fee2e2; padding-top:20px;">
+                    <strong>解決のためのチェックリスト:</strong>
+                    <ul style="margin:8px 0; padding-left:20px;">
+                        <li>GitHubに <code>js</code> フォルダ内の全てのファイルがアップロードされているか。</li>
+                        <li>ファイル名の大文字・小文字が <code>index.html</code> の指定（すべて小文字を推奨）と一致しているか。</li>
+                        <li>ブラウザのキャッシュをクリアして再読み込みしてください。</li>
+                    </ul>
+                </div>
+                <button onclick="location.reload()" style="margin-top:24px; background:#b91c1c; color:white; border:none; padding:12px 24px; border-radius:8px; cursor:pointer; font-weight:600; width:100%;">
+                    ページを再読み込みする
+                </button>
             </div>
         `;
-        const loadingEl = document.getElementById('app-loading');
-        if (loadingEl) loadingEl.style.display = 'none';
     },
 
     bindNav() {
-        const navItems = document.querySelectorAll('.nav-item');
-        navItems.forEach(item => {
-            item.addEventListener('click', (e) => {
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
                 this.closeSidebar();
             });
         });
@@ -108,14 +149,11 @@ const App = {
         const overlay = document.getElementById('sidebar-overlay');
         const sidebar = document.querySelector('.sidebar');
 
-        if (toggleBtn) {
+        if (toggleBtn && sidebar && overlay) {
             toggleBtn.addEventListener('click', () => {
                 sidebar.classList.toggle('active');
                 overlay.classList.toggle('active');
             });
-        }
-
-        if (overlay) {
             overlay.addEventListener('click', () => {
                 this.closeSidebar();
             });
@@ -130,9 +168,9 @@ const App = {
     },
 
     router(viewName) {
-        console.log(`Routing to view: ${viewName}`);
+        console.log(`Routing: Switching to [${viewName}]`);
         try {
-            // ナビのActive更新
+            // ナビゲーションの活性状態を更新
             document.querySelectorAll('.nav-item').forEach(item => {
                 item.classList.remove('active');
                 if (item.getAttribute('data-view') === viewName) {
@@ -140,7 +178,11 @@ const App = {
                 }
             });
 
-            // タイトル更新
+            // ビューの切り替え
+            const container = document.getElementById('view-container');
+            if (!container) throw new Error('critical error: view-container missing in DOM');
+
+            // 表示タイトルの更新
             const titleMap = {
                 'dashboard': 'ホーム',
                 'inventory': '工具マスター管理',
@@ -148,50 +190,43 @@ const App = {
                 'reports': '履歴・出力',
                 'settings': '設定・連携'
             };
-            const title = titleMap[viewName] || 'ホーム';
             const titleEl = document.getElementById('view-title');
-            if (titleEl) titleEl.textContent = title;
+            if (titleEl) titleEl.textContent = titleMap[viewName] || 'ホーム';
 
-            // 各ビューのレンダリング
-            const container = document.getElementById('view-container');
-            if (!container) throw new Error('view-container not found');
-
+            // レンダリング実行
             switch(viewName) {
-                case 'dashboard':
-                    DashboardView.render();
-                    break;
-                case 'inventory':
-                    InventoryView.render();
-                    break;
-                case 'inspection':
-                    InspectionView.render();
-                    break;
-                case 'reports':
-                    ReportsView.render();
-                    break;
-                case 'settings':
-                    SettingsView.render();
-                    break;
-                default:
-                    DashboardView.render();
+                case 'dashboard': DashboardView.render(); break;
+                case 'inventory': InventoryView.render(); break;
+                case 'inspection': InspectionView.render(); break;
+                case 'reports': ReportsView.render(); break;
+                case 'settings': SettingsView.render(); break;
+                default: DashboardView.render();
             }
+            
+            // スクロール位置を一番上へ
+            window.scrollTo(0, 0);
+            console.log(`View [${viewName}] rendered successfully`);
         } catch (e) {
-            console.error(`Routing Error (${viewName}):`, e);
-            const container = document.getElementById('view-container');
-            if (container) {
-                container.innerHTML = `
-                    <div style="padding:24px; color:#c00; background:#fee; border:1px solid #fcc; border-radius:8px;">
-                        <h3>画面の切り替え中にエラーが発生しました</h3>
-                        <p>${e.message}</p>
-                        <button onclick="location.hash='#dashboard'; location.reload();" style="margin-top:12px; padding:6px 12px; cursor:pointer;">ホームへ戻る</button>
-                    </div>
-                `;
-            }
+            console.error(`Router Error (${viewName}):`, e);
+            this.showViewError(viewName, e.message);
+        }
+    },
+
+    showViewError(view, msg) {
+        const container = document.getElementById('view-container');
+        if (container) {
+            container.innerHTML = `
+                <div style="padding:32px; background:#fff1f2; border:1px solid #fda4af; border-radius:12px; color:#9f1239;">
+                    <h3 style="margin-top:0;">画面の表示中にエラーが発生しました</h3>
+                    <p style="font-family:monospace; background:white; padding:8px; border-radius:4px; margin:12px 0;">${msg}</p>
+                    <button onclick="location.hash='#dashboard'; location.reload();" class="btn btn-primary">ホームへ戻る</button>
+                </div>
+            `;
         }
     }
 };
 
-// アプリケーション起動
+// DOM構築完了時に起動
 document.addEventListener('DOMContentLoaded', () => {
     App.init();
 });
