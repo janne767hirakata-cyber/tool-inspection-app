@@ -39,7 +39,6 @@ const InspectionView = {
 
         const items = StorageManager.getItems();
         
-        // 点検用データの初期化
         this.currentInspection = {
             inspector: inspectorName,
             records: items.map(item => ({
@@ -50,9 +49,10 @@ const InspectionView = {
                 requiredQty: item.requiredQty,
                 currentQty: item.currentQty,
                 needPaintCheck: item.needPaintCheck,
-                paintChecked: false, // 今回の点検での確認結果
+                paintChecked: false,
                 status: item.status,
-                calibrationDate: item.calibrationDate
+                calibrationDate: item.calibrationDate,
+                image: item.image
             }))
         };
 
@@ -68,13 +68,13 @@ const InspectionView = {
         }
 
         tbody.innerHTML = this.currentInspection.records.map((record, index) => {
-            // 塗色チェックボックス
             const paintInput = record.needPaintCheck 
-                ? `<input type="checkbox" id="paint-${index}" style="width:20px;height:20px;accent-color:var(--primary-color)">
-                   <label for="paint-${index}" style="margin-left:8px">確認</label>`
+                ? `<div class="checkbox-wrapper">
+                    <input type="checkbox" id="paint-${index}">
+                    <label for="paint-${index}">確認済</label>
+                   </div>`
                 : `<span class="text-muted">不要</span>`;
 
-            // 状態セレクト
             const statusSelect = `
                 <select class="form-control" style="width: auto;" id="status-${index}">
                     <option value="normal" ${record.status === 'normal' ? 'selected' : ''}>通常</option>
@@ -83,19 +83,26 @@ const InspectionView = {
                 </select>
             `;
 
+            const thumbHtml = record.image 
+                ? `<img src="${record.image}" class="tool-thumb" style="width:48px;height:48px;">`
+                : `<div class="tool-thumb-placeholder" style="width:48px;height:48px;"><i class="ph ph-wrench"></i></div>`;
+
             return `
             <tr>
-                <td><strong>${record.name}</strong></td>
-                <td><span style="display:inline-block; padding: 2px 8px; background:var(--primary-light); color:var(--primary-hover); border-radius:4px; font-weight:bold;">${record.location}</span></td>
-                <td>${record.requiredQty}</td>
+                <td>
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        ${thumbHtml}
+                        <div>
+                            <div style="font-weight:700; color:var(--secondary-color);">${record.name}</div>
+                            <div style="font-size:12px; color:var(--text-muted);">${record.location}エリア</div>
+                        </div>
+                    </div>
+                </td>
+                <td style="font-weight:600;">${record.requiredQty}</td>
                 <td>
                     <input type="number" id="qty-${index}" class="qty-input" value="${record.currentQty}" min="0">
                 </td>
-                <td>
-                    <div style="display:flex;align-items:center;">
-                        ${paintInput}
-                    </div>
-                </td>
+                <td>${paintInput}</td>
                 <td>${statusSelect}</td>
             </tr>
             `;
@@ -105,7 +112,6 @@ const InspectionView = {
     submitInspection() {
         if (!confirm('点検データを保存して完了しますか？')) return;
 
-        // 画面の入力値を records に反映
         this.currentInspection.records.forEach((record, index) => {
             record.currentQty = parseInt(document.getElementById(`qty-${index}`).value, 10);
             
@@ -120,7 +126,6 @@ const InspectionView = {
             }
         });
 
-        // マスターデータの更新 (個数・状態)
         this.currentInspection.records.forEach(r => {
             const item = StorageManager.getItems().find(i => i.id === r.id);
             if (item) {
@@ -130,51 +135,58 @@ const InspectionView = {
             }
         });
 
-        // 履歴の保存
         const savedRecord = StorageManager.saveInspection({
             inspector: this.currentInspection.inspector,
             items: this.currentInspection.records
         });
 
-        // Power Automate Webhookへの送信処理
         const settings = StorageManager.getSettings();
+        
+        // Webhook送信処理
         if (settings.webhookUrl) {
-            // UIを送信中にする（簡易的）
-            const btn = document.getElementById('btn-submit-inspection');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> データ送信中...';
-            btn.disabled = true;
-
-            fetch(settings.webhookUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    inspectionId: savedRecord.id,
-                    date: savedRecord.date,
-                    inspector: savedRecord.inspector,
-                    items: savedRecord.items
-                })
-            }).then(response => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                if(response.ok) {
-                    alert('点検が完了し、Power Automateへのデータ送信に成功しました！');
-                    App.router('reports');
-                } else {
-                    alert('保存は完了しましたが、Power Automateへの送信でエラーが発生しました（ステータス: ' + response.status + '）');
-                    App.router('reports');
-                }
-            }).catch(error => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                alert('保存は完了しましたが、Power Automateとの通信に失敗しました。URLやネットワークを確認してください。\n' + error);
-                App.router('reports');
-            });
-        } else {
-            alert('点検が完了しました！履歴画面へ移動します。');
-            App.router('reports');
+            this.sendToWebhook(settings.webhookUrl, savedRecord);
         }
+
+        // 完了メッセージとメール送信の選択
+        this.showCompletionModal(savedRecord, settings.supervisorEmail);
+    },
+
+    sendToWebhook(url, record) {
+        fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(record)
+        }).catch(e => console.error('Webhook Error:', e));
+    },
+
+    showCompletionModal(record, email) {
+        const hasAlerts = record.items.some(i => i.currentQty < i.requiredQty || (i.needPaintCheck && !i.paintChecked));
+        const alertText = hasAlerts ? '【注意】在庫不足または未確認の項目があります。' : '全ての項目が正常に点検されました。';
+
+        if (confirm(`点検が完了しました！\n\n${alertText}\n\n助役へ報告メールを送信しますか？`)) {
+            this.sendEmail(record, email);
+        }
+        App.router('reports');
+    },
+
+    sendEmail(record, toEmail) {
+        const date = new Date().toLocaleDateString('ja-JP');
+        const subject = encodeURIComponent(`【工器具点検報告】${date} 実施者: ${record.inspector}`);
+        
+        let bodyText = `助役様\n\nお疲れ様です。本日分の工器具点検が完了しましたので報告いたします。\n\n`;
+        bodyText += `■点検日: ${date}\n`;
+        bodyText += `■実施者: ${record.inspector}\n\n`;
+        bodyText += `■点検概要:\n`;
+        
+        record.items.forEach(item => {
+            const isOk = item.currentQty >= item.requiredQty;
+            const statusIcon = isOk ? '○' : '!!';
+            bodyText += `${statusIcon} ${item.name}: ${item.currentQty}/${item.requiredQty} (状態: ${item.status})\n`;
+        });
+
+        bodyText += `\n詳細はアプリの履歴画面よりご確認ください。\n以上、よろしくお願いいたします。`;
+        
+        const mailto = `mailto:${toEmail}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
+        window.location.href = mailto;
     }
 };

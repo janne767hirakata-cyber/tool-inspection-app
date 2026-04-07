@@ -36,17 +36,21 @@ const DashboardView = {
         const lowStockItems = items.filter(i => i.type === 'consumable' && i.currentQty < i.requiredQty);
         
         if (lowStockItems.length === 0) {
-            alertList.innerHTML = '<li class="list-item"><p class="text-muted">現在アラートはありません。</p></li>';
+            alertList.innerHTML = '<li class="text-muted" style="padding:20px; text-align:center;">現在アラートはありません。</li>';
         } else {
-            alertList.innerHTML = lowStockItems.map(i => `
-                <li class="list-item danger">
-                    <div class="list-item-icon"><i class="ph ph-warning-circle"></i></div>
-                    <div class="list-item-content">
-                        <h4>${i.name} の在庫が不足しています</h4>
-                        <p>現在: ${i.currentQty} / 規定: ${i.requiredQty}</p>
+            alertList.innerHTML = lowStockItems.map(i => {
+                const thumb = i.image ? `<img src="${i.image}" class="tool-thumb" style="width:40px;height:40px;">` : `<div class="tool-thumb-placeholder" style="width:40px;height:40px;"><i class="ph ph-warning"></i></div>`;
+                return `
+                <li style="display:flex; align-items:center; gap:16px; padding:16px; border-bottom:1px solid var(--border-color);">
+                    ${thumb}
+                    <div style="flex:1;">
+                        <div style="font-weight:700; color:var(--danger-color);">${i.name} の在庫不足</div>
+                        <div style="font-size:13px; color:var(--text-muted);">現在数: ${i.currentQty} / 規定数: ${i.requiredQty}</div>
                     </div>
+                    <button class="btn btn-icon" onclick="InventoryView.editItem('${i.id}')"><i class="ph ph-pencil"></i></button>
                 </li>
-            `).join('');
+                `;
+            }).join('');
         }
 
         // 校正・貸出リスト
@@ -54,22 +58,22 @@ const DashboardView = {
         const maintenanceItems = items.filter(i => i.status === 'borrowed' || i.status === 'calibration');
         
         if (maintenanceItems.length === 0) {
-            mainList.innerHTML = '<li class="list-item"><p class="text-muted">現在貸出・校正中の工具はありません。</p></li>';
+            mainList.innerHTML = '<li class="text-muted" style="padding:20px; text-align:center;">現在貸出・校正中の工具はありません。</li>';
         } else {
             mainList.innerHTML = maintenanceItems.map(i => {
                 const isCalibration = i.status === 'calibration';
                 const statusText = isCalibration ? '校正中' : '貸出中';
-                const iconClass = isCalibration ? 'warning' : '';
-                const icon = isCalibration ? '<i class="ph ph-wrench"></i>' : '<i class="ph ph-hand-coins"></i>';
-                const dateText = isCalibration && i.calibrationDate ? ` (次回予定: ${i.calibrationDate})` : '';
+                const dateText = isCalibration && i.calibrationDate ? `<br><span style="font-size:11px; color:var(--primary-color);">次回: ${i.calibrationDate}</span>` : '';
+                const thumb = i.image ? `<img src="${i.image}" class="tool-thumb" style="width:40px;height:40px;">` : `<div class="tool-thumb-placeholder" style="width:40px;height:40px;"><i class="ph ph-wrench"></i></div>`;
 
                 return `
-                <li class="list-item ${iconClass}">
-                    <div class="list-item-icon">${icon}</div>
-                    <div class="list-item-content">
-                        <h4>${i.name}</h4>
-                        <p>状態: ${statusText}${dateText}</p>
+                <li style="display:flex; align-items:center; gap:16px; padding:16px; border-bottom:1px solid var(--border-color);">
+                    ${thumb}
+                    <div style="flex:1;">
+                        <div style="font-weight:700;">${i.name}</div>
+                        <div style="font-size:13px; color:var(--text-muted);">${statusText}${dateText}</div>
                     </div>
+                    <button class="btn btn-icon" onclick="InventoryView.editItem('${i.id}')"><i class="ph ph-pencil"></i></button>
                 </li>
                 `;
             }).join('');

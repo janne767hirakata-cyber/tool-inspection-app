@@ -22,7 +22,7 @@ class StorageManager {
             localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify([]));
         }
         if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) {
-            localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify({ webhookUrl: "" }));
+            localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify({ webhookUrl: "", supervisorEmail: "" }));
         }
     }
 
